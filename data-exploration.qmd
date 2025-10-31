@@ -1,0 +1,74 @@
+---
+title: "Data Exploration"
+author: "Nathalie Bonnet"
+date: 10-30-2025
+format: html
+warning: false
+errors: false
+---
+
+The goal of this quarto document is to complete some basic data exploration, wrangling, and visualization. 
+
+
+### Setup Code
+
+```{r}
+# Load libraries
+library(tidyverse)
+library(paletteer)
+
+theme_set(theme_bw(18))
+```
+
+```{r}
+# Load data and recode values of interest
+therm <- read.csv(here::here("data/hyperthermal-tolerance.csv"), na.strings = c("", "NA")) %>% 
+  janitor::clean_names() %>% 
+  mutate(sex = recode(sex, male = "M", Male = "M", female = "F", Female = "F")) %>% 
+  mutate(genus = recode(genus, agapostemon = "Agapostemon", 
+                        augochorella = "Augochorella",
+                        bombus = "Bombus", 
+                        colletes = "Colletes", 
+                        diadasia = "Diadasia", 
+                        halictus = "Halictus",
+                        lasioglossum = "Lasioglossum", 
+                        "Lasioglossum " = "Lasioglossum",
+                        nomada = "Nomada", 
+                        ))
+
+```
+
+### Subset thermal tolerance dataframe for genera with more than 3 observations
+
+```{r}
+therm_subset <- therm %>% 
+  group_by(genus) %>% 
+  filter(n() > 3) %>% 
+  ungroup() 
+```
+
+### Visualize distributions and central tendency
+
+```{r, fig.width=10, fig.height=10}
+ggplot(data = therm_subset, aes(x = mass_g, y = tbs_mins, color = sex)) +
+  geom_point(size = 4) +
+  scale_x_continuous(limits = c(0, 0.12)) +
+  scale_y_continuous(limits = c(0, 500)) +
+  labs(title = "Thermal Tolerance vs. Wet Weight", 
+       x = "Body mass (g)", 
+       y = "Time until heat stupor (mins)") +
+  scale_color_paletteer_d("MoMAColors::Klein", na.value = "darkgrey")
+```
+
+```{r, fig.width=10, fig.height=10}
+ggplot(data = therm_subset, aes(x = sex, y = tbs_mins)) +
+  geom_violin(aes(fill = genus)) +
+  geom_boxplot(width = 0.1, alpha = 0.2) +
+  facet_wrap(~genus, axes = "all_x") +
+  theme(legend.position = "none") +
+  labs(title = "Distribution of Thermal Tolerance in Bees by Genus and Sex", 
+       x = "Sex", 
+       y = "Time before heat stupor (mins)") +
+  scale_fill_paletteer_d("MoMAColors::Klein")
+```
+
