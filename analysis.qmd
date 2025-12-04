@@ -1,0 +1,293 @@
+---
+title: "analysis"
+format: html
+code-fold: true
+---
+
+```{r, echo=FALSE}
+# Load in necessary libraries
+library(tidyverse)
+library(knitr)
+library(patchwork)
+library(kableExtra)
+library(here)
+library(dagitty)
+library(e1071)
+
+set.seed(123)
+
+theme_set(theme_bw(18))
+```
+
+```{r}
+# Load data and recode values of interest
+therm <- read.csv(here::here("data/hyperthermal-tolerance.csv"), na.strings = c("", "NA")) %>% 
+  janitor::clean_names() %>% 
+  mutate(sex = recode(sex, male = "M", Male = "M", female = "F", Female = "F")) %>% 
+  mutate(genus = recode(genus, agapostemon = "Agapostemon", 
+                        augochorella = "Augochorella",
+                        bombus = "Bombus", 
+                        colletes = "Colletes", 
+                        diadasia = "Diadasia", 
+                        halictus = "Halictus",
+                        lasioglossum = "Lasioglossum", 
+                        "Lasioglossum " = "Lasioglossum",
+                        nomada = "Nomada", 
+                        ))
+
+```
+
+```{r}
+therm_subset <- therm %>% 
+  group_by(genus) %>% 
+  filter(n() > 3) %>% 
+  ungroup() %>% 
+  drop_na(tbs_mins, mass_g, ambient_air_temperature_c, genus)
+```
+
+```{r}
+hist(therm$tbs_mins, breaks = 15, main = " ")
+skewness(therm$tbs_mins, na.rm = TRUE)
+
+hist(therm$mass_g, breaks = 15)
+skewness(therm$mass_g, na.rm = TRUE)
+mean(therm$mass_g, na.rm = TRUE)
+
+hist(therm$ambient_air_temperature_c)
+skewness(therm$ambient_air_temperature_c, na.rm = TRUE)
+mean(therm$ambient_air_temperature_c, na.rm = TRUE)
+```
+One of the interesting facets of survivorship data is the question of censorship. In this study, some bees remained active (not in heat stupor) beyond a point that data could continue to be collected. This resulted in the need for a 'censor' binomial measurement (0 or 1) indicating whether or not a heat wave simulation was cut off for an individual. This raises the question of whether censorship can be predicted by specific variables, or if there is experimental error. 
+
+Here, because we have a binomial variable, we want to create a logistic regression to test this first question. The first step here is to confirm whether there are enough censored data to compare. 
+
+```{r}
+# Check the percent of censored bees
+perc_0 <- round(((1 - mean(therm$censor, na.rm = TRUE)) *100), digits = 2)
+```
+
+Censored data makes up `r perc_0`% of all time until stupor data points. This is within a testable range. We 
+
+```{r}
+# Simulate a logistic regression on a binomial response variable
+
+# 1. Define Model Parameters
+n <- 100 # Number of observations
+beta0 <- -1 # Intercept
+beta1 <- 0.5 # Coefficient for x1
+beta2 <- -0.3 # Coefficient for x2
+
+# 2. Generate Predictor Variables
+body_mass <- rlnorm(n, meanlog = )
+air_temp <- rnorm(n, mean = 0, sd = 1) # Continuous predictor
+genus <- factor(sample(c("G1","G2","G3","G4", "G5", "G6", "G7", "G8"), n, replace = TRUE))
+
+# 3. Calculate the Linear Predictor 
+
+
+# 4. Convert to probability
+
+
+# 5. Simulate Binary Outcomes
+y <- rbinom(n, size = 1, prob = prob)
+
+# Combine into a data frame (optional, but good practice)
+sim_data <- data.frame(x1, x2, y, prob)
+
+# You can then fit a logistic regression model to this simulated data
+# to see if you recover the original coefficients:
+# simulated_model <- glm(y ~ x1 + x2, family = binomial(link = "logit"), data = sim_data)
+# summary(simulated_model)
+
+```
+
+
+The skewness for our predictor variable is `r skewness`. A positive skewness indicates a right skew, or in other words, that the mean is larger than the median of the data.
+
+-   gamma distributions are for right skewed data with positive continuous predictors
+
+We are modeling tbs as a function of body mass and genus, and throwing in air temperature to assess how ambient conditions might impact the model fit.
+
+modeling tbs as a function of mass including genus in the model- could potentially throw in air temperature- make this part of your analysis
+
+## Gamma Distribution parameters and assumptions
+
+Notice that these parameters do not fit our predictor and outcome directly. We will need to essentially reproject the model to make claims about the response variable
+
+eta = beta0 + beta_mass * log_mass + beta_temp * temp + genus_intercept
+
+mu = exp(eta)
+
+Gamma(shape=phi, scale=mu/phi)
+
+
+T∼Gamma(shape=ϕ, scale=μ/ϕ)
+log(μ)=β0 +β1*log(body_mass)+β2*temp+ β3*genus
+
+
+B3 genus represents the fact that we are using a reference variable and dummy variables for modeling purposes, so y is an indicator of 0 or 1 (turns the interaction on or off)
+
+```{r}
+unique(therm_subset$genus)
+sd(therm_subset$mass_g, na.rm = TRUE)
+sd(therm_subset$ambient_air_temperature_c, na.rm = TRUE)
+```
+
+```{r}
+# Simulate data for sim model
+
+# Model assumptions
+n <- 500 # Sample size
+beta0  <- 1.0 # Intercept
+beta_mass <- 0.6 # Effect of body mass on response
+beta_temp <- -0.05 # Effect of temperature on response
+phi <- 5 # Gamma shape parameter
+genus_sd <- 0.4 # SD of genus-level random intercepts
+
+# Generate data with genera
+genus <- factor(sample(c("Agapostemon","Apis","Augochorella","Bombus", "Colletes", "Diadasia", "Halictus", "Lasioglossum"), n, replace = TRUE))
+
+# Generate random genus effects on response
+genus_effect <- rnorm(8, 0, genus_sd)
+names(genus_effect) <- levels(genus)
+
+# Generate data for predictors
+body_mass <- rnorm(n, mean = 0.3, sd = 0.03)
+amb_temp <- rnorm(n, mean = 23, sd = 3)
+
+# Linearized model to predict log expected time
+log_mu <- beta0 +
+       beta_mass+
+       beta_temp+
+       genus_effect[genus]
+
+mu <- exp(log_mu) 
+
+# Simulate response variable
+time <- rgamma(n, shape = phi, scale = mu / phi)
+
+# Put predictors into a dataframe
+sim_data <- data.frame(time, body_mass, amb_temp, genus)
+
+sim_fit <- glm(time ~ body_mass * genus + amb_temp,
+  family = Gamma(link = "log"),
+  data = sim_data)
+
+summary(sim_fit) # We expect to see the values we put in
+
+```
+
+
+Remove the zero values from tbs because these bees were dead before they even got put into the incubator
+
+```{r}
+therm_subset <- therm_subset %>% 
+  filter(tbs_mins > 0) %>% 
+  select(catalog_number, genus, sex, tbs_mins, censor, mass_g, ambient_air_temperature_c) 
+```
+
+
+```{r}
+m1 <- glm(
+  tbs_mins ~ mass_g + genus + mass_g:genus,
+  family = Gamma(link = "log"),
+  data = therm_subset
+)
+
+summary(m1)
+```
+
+```{r}
+pred_data <- expand_grid(
+  mass_g = seq(min(therm_subset$mass_g, na.rm = TRUE),
+               max(therm_subset$mass_g, na.rm = TRUE),
+               length.out = length(therm_subset)),
+  genus = unique(therm_subset$genus))
+
+pred_ci <- predict(m1,
+  newdata = pred_data,
+  type = "link",
+  se.fit = TRUE
+)
+
+pred_results <- pred_data %>%
+  mutate(
+    fit_link = pred_ci$fit,
+    se = pred_ci$se.fit,
+    pred_tbs = exp(fit_link),
+    lower = exp(fit_link - 1.96 * se),
+    upper = exp(fit_link + 1.96 * se)
+  )
+```
+
+```{r}
+ggplot(pred_results, aes(mass_g, pred_tbs)) +
+  facet_wrap(~genus) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
+              alpha = 0.2, color = NA) +
+  scale_y_continuous(limits = c(0, 900)) +
+  labs(
+    title = "Predicted Time Before Stupor (TBS) with a Gamma GLM",
+    x = "Log Mass (g)",
+    y = "Predicted TBS (minutes)"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+m2 <- glm(
+  tbs_mins ~ mass_g * genus + ambient_air_temperature_c,
+  family = Gamma(link = "log"),
+  data = therm_subset
+)
+
+summary(m2)
+```
+
+```{r}
+pred_data <- expand_grid(
+  mass_g = seq(min(therm_subset$mass_g, na.rm = TRUE),
+               max(therm_subset$mass_g, na.rm = TRUE),
+               length.out = length(therm_subset)),
+  
+  genus = unique(therm_subset$genus),  
+  
+  ambient_air_temperature_c = mean(therm_subset$ambient_air_temperature_c, na.rm = TRUE),
+)
+
+pred_ci <- predict(
+  m2,
+  newdata = pred_data,
+  type = "link",
+  se.fit = TRUE
+)
+
+pred_results <- pred_data %>%
+  mutate(
+    fit_link = pred_ci$fit,
+    se = pred_ci$se.fit,
+    pred_tbs = exp(fit_link),
+    lower = exp(fit_link - 1.96 * se),
+    upper = exp(fit_link + 1.96 * se)
+  )
+```
+
+```{r}
+ggplot(pred_results, aes(mass_g, pred_tbs)) +
+  facet_wrap(~genus) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
+              alpha = 0.2, color = NA) +
+  scale_y_continuous(limits = c(0, 1000)) +
+  labs(
+    title = "Predicted Time Before Stupor (TBS) Gamma GLM",
+    x = "Log Mass (g)",
+    y = "Predicted TBS (minutes)", 
+    fill = "Genus"
+  ) +
+  theme_minimal()
+```
+
