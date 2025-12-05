@@ -1,7 +1,6 @@
 ---
 title: "analysis"
 format: html
-code-fold: true
 ---
 
 ```{r, echo=FALSE}
@@ -13,6 +12,7 @@ library(kableExtra)
 library(here)
 library(dagitty)
 library(e1071)
+library(dagitty)
 
 set.seed(123)
 
@@ -93,11 +93,6 @@ y <- rbinom(n, size = 1, prob = prob)
 
 # Combine into a data frame (optional, but good practice)
 sim_data <- data.frame(x1, x2, y, prob)
-
-# You can then fit a logistic regression model to this simulated data
-# to see if you recover the original coefficients:
-# simulated_model <- glm(y ~ x1 + x2, family = binomial(link = "logit"), data = sim_data)
-# summary(simulated_model)
 
 ```
 
@@ -198,6 +193,7 @@ summary(m1)
 ```
 
 ```{r}
+# Generate predicted data grid with predictors
 pred_data <- expand_grid(
   mass_g = seq(min(therm_subset$mass_g, na.rm = TRUE),
                max(therm_subset$mass_g, na.rm = TRUE),
@@ -212,9 +208,13 @@ pred_ci <- predict(m1,
 
 pred_results <- pred_data %>%
   mutate(
-    fit_link = pred_ci$fit,
+  # Generate predictions in link space
+    link_vals = pred_ci$fit,
+  # Generate column of standard errors from link space values
     se = pred_ci$se.fit,
+  # Back out of link space, generate response predictions
     pred_tbs = exp(fit_link),
+  # Generate confidence interval (~2 standard deviations away from predicted values in the response space)
     lower = exp(fit_link - 1.96 * se),
     upper = exp(fit_link + 1.96 * se)
   )
@@ -223,16 +223,18 @@ pred_results <- pred_data %>%
 ```{r}
 ggplot(pred_results, aes(mass_g, pred_tbs)) +
   facet_wrap(~genus) +
-  geom_line(size = 1) +
+  geom_line(size = 0.5) +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
-              alpha = 0.2, color = NA) +
+              alpha = 0.5, color = NA) +
+  scale_x_continuous(limits = c(0, 0.1)) +
   scale_y_continuous(limits = c(0, 900)) +
   labs(
     title = "Predicted Time Before Stupor (TBS) with a Gamma GLM",
     x = "Log Mass (g)",
     y = "Predicted TBS (minutes)"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  scale_fill_paletteer_d("palettetown::charizard")
 ```
 
 
@@ -278,9 +280,9 @@ pred_results <- pred_data %>%
 ```{r}
 ggplot(pred_results, aes(mass_g, pred_tbs)) +
   facet_wrap(~genus) +
-  geom_line(size = 1) +
+  geom_line(size = 0.5) +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
-              alpha = 0.2, color = NA) +
+              alpha = 0.7, color = NA) +
   scale_y_continuous(limits = c(0, 1000)) +
   labs(
     title = "Predicted Time Before Stupor (TBS) Gamma GLM",
@@ -288,6 +290,7 @@ ggplot(pred_results, aes(mass_g, pred_tbs)) +
     y = "Predicted TBS (minutes)", 
     fill = "Genus"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  scale_fill_paletteer_d("palettetown::charizard")
 ```
 

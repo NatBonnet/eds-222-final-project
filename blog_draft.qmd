@@ -1,0 +1,106 @@
+---
+title: "blog_draft"
+format: html
+code-fold: True
+---
+
+```{r, echo=FALSE}
+# Load in necessary libraries
+library(tidyverse)
+library(knitr)
+library(patchwork)
+library(kableExtra)
+library(here)
+library(dagitty)
+library(e1071)
+library(dagitty)
+
+set.seed(123)
+
+theme_set(theme_bw(18))
+```
+
+## Dataset background and motivations
+
+Native bee species are essential in supporting natural ecosystems because the reproduction of nearly 90% of all flowering plants depends on pollinators (Ollerton et al. 2011). Declines in bee populations due to land use and climate change threaten biodiversity and food security for the human population. 
+
+Bees are susceptible to climate change because their flight activity can increase body temperature beyond ambient air temperature (Heinrich and Buchmann 1986), forcing them to pollinate beyond their critical thermal range or stop pollinating altogether in high temperatures (Suni and Dela Cruz 2021). Body size is another trait of interest because of its impact on an individual’s ability to release heat, depending on their surface area to volume ratio. Further, sex has been identified as a potential variable in thermal tolerance (Zambra et al. 2020)
+
+With increasing frequency of extreme weather events, it becomes critical to understand the variables that influence pollinator thermal tolerance as it relates to supporting ecosystem services. Further, an increasing scientific interest in species beyond European honey bees (Apis mellifera) is paramount to preserving biodiversity.
+
+California alone has approximately 1,600 native bee species (U.S. Fish and Wildlife). As a student researcher in UCSB's Cheadle Center for Biodiversity and Ecological Restoration, I became particularly interested in the intersect between climate change and pollinator conservation in California. As part of my independent research project, I collected a dataset simulating a 40°F (104°C) heatwave on an assemblage of bees from mainland Santa Barbara and Santa Cruz Island. Thermal tolerance was measured as time until heat stupor (TBS) in minutes. Stupor was defined in research methods as a lack of response to physical stimuli, however, many bees were taken out of the experiment because they died. Importantly, some simulation trials were stopped when they could not be continued after a period of many hours. This was factored into the data as a 'censor' indicator. Data included geographic information from collection sites, ambient air temperature, wet and dry mass, and intertegular distance as a proxy for body size. Species and sex information identified between myself, Dr. Katja Seltmann, and Dr. Jamie Pawelek. 
+
+Based on currently available research, I predicted that the primary predictive variables for thermal tolerance would be genus due to physiological level differences, body mass, and ambient air temperature as a baseline for thermal stress.
+
+## Preliminary data exploration
+```{r}
+ggplot(therm, aes(body_mass, ))
+```
+
+
+## Data cleaning
+
+
+```{r}
+# Load dataset from csv
+therm <- read.csv(here::here("data/hyperthermal-tolerance.csv"), 
+  # Standardize values that are NA               
+  na.strings = c("", "NA")) %>%
+  # Standardize naming conventions in columns
+  janitor::clean_names() %>%
+  # Recode values in 'sex' column to follow the same conventions
+  mutate(sex = recode(
+    sex,
+    male = "M",
+    Male = "M",
+    female = "F",
+    Female = "F"
+  )) %>%
+  # Recode genus names to match capitalization
+  mutate(
+    genus = recode(
+      genus,
+      agapostemon = "Agapostemon",
+      augochorella = "Augochorella",
+      bombus = "Bombus",
+      colletes = "Colletes",
+      diadasia = "Diadasia",
+      halictus = "Halictus",
+      lasioglossum = "Lasioglossum",
+      "Lasioglossum " = "Lasioglossum",
+      nomada = "Nomada",
+    )
+  )
+```
+
+
+```{r}
+# Subset data frame to only include genera with greater than 3 observations
+therm_subset <- therm %>% 
+  group_by(genus) %>% 
+  filter(n() > 3) %>% 
+  ungroup() %>% 
+  # Drop rows with NAs from variables of interest
+  drop_na(tbs_mins, mass_g, ambient_air_temperature_c, genus)
+```
+
+```{r}
+hist(therm$tbs_mins, breaks = 15, main = " ")
+skewness(therm$tbs_mins, na.rm = TRUE)
+```
+
+```{r, fig.cap="Directed acyclic graph (DAG) of theorized variables necessary to include in a model for bee thermal tolerance"}
+dag_code <- dagitty('dag {
+bb="0,0,1,1"
+"ambient air temperature" [pos="0.309,0.307"]
+"body mass (g)" [pos="0.745,0.282"]
+"time before heat stupor (mins)" [pos="0.521,0.443"]
+genus [pos="0.536,0.176"]
+"ambient air temperature" -> "time before heat stupor (mins)"
+"body mass (g)" -> "time before heat stupor (mins)"
+genus -> "body mass (g)"
+}')
+
+plot(dag_code)
+```
+
