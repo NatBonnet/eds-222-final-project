@@ -2,6 +2,7 @@
 title: "blog_draft"
 format: html
 code-fold: True
+warning: False
 ---
 
 ```{r, echo=FALSE}
@@ -14,6 +15,7 @@ library(here)
 library(dagitty)
 library(e1071)
 library(dagitty)
+library(broom)
 
 set.seed(123)
 
@@ -22,30 +24,28 @@ theme_set(theme_bw(18))
 
 ## Dataset background and motivations
 
-Native bee species are essential in supporting natural ecosystems because the reproduction of nearly 90% of all flowering plants depends on pollinators (Ollerton et al. 2011). Declines in bee populations due to land use and climate change threaten biodiversity and food security for the human population. 
+![California native bees on a flower. Photo shows a male Agapostemon bee (left) next to a smaller bee (likely of genus Halictus)](~/MEDS/EDS-222/final-project/eds-222-final-project/images) Native bee species are essential in supporting natural ecosystems because the reproduction of nearly 90% of all flowering plants depends on pollinators (Ollerton et al. 2011). Declines in bee populations due to land use and climate change threaten biodiversity and food security for the human population.
 
 Bees are susceptible to climate change because their flight activity can increase body temperature beyond ambient air temperature (Heinrich and Buchmann 1986), forcing them to pollinate beyond their critical thermal range or stop pollinating altogether in high temperatures (Suni and Dela Cruz 2021). Body size is another trait of interest because of its impact on an individual’s ability to release heat, depending on their surface area to volume ratio. Further, sex has been identified as a potential variable in thermal tolerance (Zambra et al. 2020)
 
 With increasing frequency of extreme weather events, it becomes critical to understand the variables that influence pollinator thermal tolerance as it relates to supporting ecosystem services. Further, an increasing scientific interest in species beyond European honey bees (Apis mellifera) is paramount to preserving biodiversity.
 
-California alone has approximately 1,600 native bee species (U.S. Fish and Wildlife). As a student researcher in UCSB's Cheadle Center for Biodiversity and Ecological Restoration, I became particularly interested in the intersect between climate change and pollinator conservation in California. As part of my independent research project, I collected a dataset simulating a 40°F (104°C) heatwave on an assemblage of bees from mainland Santa Barbara and Santa Cruz Island. Thermal tolerance was measured as time until heat stupor (TBS) in minutes. Stupor was defined in research methods as a lack of response to physical stimuli, however, many bees were taken out of the experiment because they died. Importantly, some simulation trials were stopped when they could not be continued after a period of many hours. This was factored into the data as a 'censor' indicator. Data included geographic information from collection sites, ambient air temperature, wet and dry mass, and intertegular distance as a proxy for body size. Species and sex information identified between myself, Dr. Katja Seltmann, and Dr. Jamie Pawelek. 
+California alone has approximately 1,600 native bee species (U.S. Fish and Wildlife). As a student researcher in UCSB's Cheadle Center for Biodiversity and Ecological Restoration, I became particularly interested in the intersect between climate change and pollinator conservation in California. As part of my independent research project, I collected a dataset simulating a 40°F (104°C) heatwave on an assemblage of bees from mainland Santa Barbara and Santa Cruz Island. Thermal tolerance was measured as time until heat stupor (TBS) in minutes. Stupor was defined in research methods as a lack of response to physical stimuli, however, many bees were taken out of the experiment because they died. Importantly, some simulation trials were stopped when they could not be continued after a period of many hours. This was factored into the data as a 'censor' indicator. Data included geographic information from collection sites, ambient air temperature, wet and dry mass, and intertegular distance as a proxy for body size. Species and sex information identified between myself, Dr. Katja Seltmann, and Dr. Jamie Pawelek.
 
 Based on currently available research, I predicted that the primary predictive variables for thermal tolerance would be genus due to physiological level differences, body mass, and ambient air temperature as a baseline for thermal stress.
 
 ## Preliminary data exploration
-```{r}
-ggplot(therm, aes(body_mass, ))
-```
 
-
-## Data cleaning
-
+### Cleaning
 
 ```{r}
 # Load dataset from csv
-therm <- read.csv(here::here("data/hyperthermal-tolerance.csv"), 
+therm <- read.csv(here::here("data", "hyperthermal-tolerance.csv"), 
   # Standardize values that are NA               
-  na.strings = c("", "NA")) %>%
+  na.strings = c("", "NA"))
+
+# Clean original data
+therm_clean <- therm %>% 
   # Standardize naming conventions in columns
   janitor::clean_names() %>%
   # Recode values in 'sex' column to follow the same conventions
@@ -70,24 +70,103 @@ therm <- read.csv(here::here("data/hyperthermal-tolerance.csv"),
       "Lasioglossum " = "Lasioglossum",
       nomada = "Nomada",
     )
-  )
+  ) %>% 
+  group_by(genus) %>% 
+  filter(n() > 3) %>% 
+  ungroup()
 ```
 
+### Visualizing the distribution of variables of interest
+
+```{r, fig.cap="Histogram of thermal tolerance data."}
+ggplot(therm_clean, aes(x = tbs_mins)) +
+  geom_histogram(bins = 50, 
+                 fill = "#207890FF")+
+  labs(x= "TBS (mins)", 
+       y = "count")
+```
+
+
+```{r, fig.cap="Histogram of bee body mass (g) data."}
+ggplot(therm_clean, aes(x = mass_g)) +
+  geom_histogram(bins = 50, 
+                 fill = "#207890FF")+
+  labs(x= "Wet body mass (g)", 
+       y = "count")
+```
+
+
+```{r, fig.cap="Histogram of ambient air temperature data."}
+ggplot(therm_clean, aes(x = ambient_air_temperature_c)) +
+  geom_histogram(bins = 50, 
+                 fill = "#207890FF")+
+  labs(x= "Ambient air temperature (°F)", 
+       y = "count")
+```
+
+
+Based on preliminary data exploration through histograms to visualize the distribution of the continuous variables of interest, I saw that thermal tolerance (TBS) and body mass appeared right skewed. The shape of the air temperature histogram can be explained by there being some experiments with a greater number of individuals concentrated in one assay. To confirm this in the response data, I checked the skewness value.
+
+```{r}
+tbs_skew <- skewness(therm_clean$tbs_mins, na.rm = TRUE)
+```
+
+the skewness value for TBS is `r tbs_skew`. A skewness value \> 0 indicates positive/ right-skewed data.
+
+### Visualizing the interaction between variables
+
+```{r, fig.cap="Scatterplot of TBS (mins) and wet body mass (g)."}
+ggplot(data = therm_clean, aes(x = mass_g, y = tbs_mins, color = sex)) +
+  geom_point(size = 4) +
+  scale_x_continuous(limits = c(0, 0.12)) +
+  scale_y_continuous(limits = c(0, 500)) +
+  labs(x = "Body mass (g)", 
+       y = "Time until heat stupor (mins)", 
+       main = "Sex") +
+  scale_color_paletteer_d("palettetown::charizard", na.value = "darkgrey")
+```
+
+```{r, fig.cap="Scatterplot showing TBS (mins) verus ambient air temperature measured at time and site of collection."}
+ggplot(data = therm_clean, aes(x = ambient_air_temperature_c, y = tbs_mins))+
+  theme(legend.position = "none")+
+  geom_point(size = 4, 
+             color = "#D86020FF") +
+  labs(x = "Ambient air temperature (°F)", 
+       y = "Time until heat stupor (mins)") +
+  scale_color_paletteer_d("palettetown::charizard")
+```
+
+The scatterplots rendered above show a fairly nonlinear response in thermal tolerance to each variable.
+
+```{r, fig.cap="Violin plot displaying the central tendency and distribution of TBS across genera by sex."}
+ggplot(data = therm_clean, aes(x = sex, y = tbs_mins)) +
+  geom_violin(aes(fill = genus)) +
+  geom_boxplot(width = 0.1, alpha = 0.2) +
+  facet_wrap(~genus, axes = "all_x") +
+  theme(legend.position = "none") +
+  labs(title = "Distribution of Thermal Tolerance in Bees by Genus and Sex", 
+       x = "Sex", 
+       y = "Time before heat stupor (mins)") +
+  scale_fill_paletteer_d("palettetown::charizard")
+```
+
+
+Looking at the central tendency and distribution of TBS in relation to genus and sex. The data across sex does not appear to represent the entire sample, and there are a fair amount of NA values to account for before trying to construct a model.
+
+## Subsetting data
+
+Based on the exploratory data analysis summarized in the previous section, I chose to exclude genera with fewer than 3 observations from further analysis, and to not include sex as a predictor as it does not represent each genus very equally, making it difficult to truly say how sex may affect overall thermal tolerance across genera. Further, I filtered for TBS values greater than 0, as some bees captured died before even being put into the experimental conditions.
 
 ```{r}
 # Subset data frame to only include genera with greater than 3 observations
-therm_subset <- therm %>% 
-  group_by(genus) %>% 
-  filter(n() > 3) %>% 
-  ungroup() %>% 
+therm_subset <- therm_clean %>% 
   # Drop rows with NAs from variables of interest
-  drop_na(tbs_mins, mass_g, ambient_air_temperature_c, genus)
+  drop_na(tbs_mins, mass_g, ambient_air_temperature_c, genus) %>% 
+  filter(tbs_mins > 0) %>% 
+  select(catalog_number, genus, sex, tbs_mins, censor, mass_g, ambient_air_temperature_c) 
 ```
 
-```{r}
-hist(therm$tbs_mins, breaks = 15, main = " ")
-skewness(therm$tbs_mins, na.rm = TRUE)
-```
+## Drawing a DAG
 
 ```{r, fig.cap="Directed acyclic graph (DAG) of theorized variables necessary to include in a model for bee thermal tolerance"}
 dag_code <- dagitty('dag {
@@ -104,3 +183,239 @@ genus -> "body mass (g)"
 plot(dag_code)
 ```
 
+With the background knowledge from prior research, exploratory analysis, and cleaned data, I created a DAG to represent the possible causative relationships between thermal tolerance and other variables included in sampling.
+
+## Choosing a model
+
+The histogram created to visualize the distribution of my response variable indicated a right skew in the data, which was confirmed by a measure of skewness. These data are all positive and continuous values.
+
+These data attributes fit the primary assumptions of gamma distributed data.
+
+The gamma distribution is a continuous probability distribution modeling right skewed positive data. The distribution takes on two parameters, a shape parameter (a), and a scale parameter (\theta ). The shape parameter determines the skewness and modality of the distribution, while the scale parameter controls the spread and mean.
+
+A caveat to using this distribution is the aforementioned census variable, which is extremely common in survivorship data such as these. The censor variable indicates if the event of interest was actually observed by the end of the study. This inherently links to the way tolerance is predicted, which suggests a more complex model such as a mixed effect model or a survivorship specific model may fit the data generating process better.
+
+However, for the purposes of understanding the relationships through a more simplified model and learning how to apply the family 'gamma' to a model, I explored the effects of the variables described in the DAG using:
+
+$$TBS\tilde{}Gamma(\alpha, \phi)$$ 
+$$TBS\tilde{}Gamma(\alpha, \phi)$$ 
+$$log(\mu)  =  \beta_0 + \beta_1*mass + \beta_2*temperature + \beta_3*Agapostemon + \beta_4*Apis + \beta_5*Augochorella + \beta_6*Colletes + \beta_7*Diadasia + \beta_8*Halictus + \beta_9*Lasioglossum + \sigma\beta_I_k(mass*genus_i,_k)$$ 
+
+The linearized predictor link function allows the interaction that we would expect between genus and mass, as mass is variable by genus. This allows flexibility between predicted lines by genus. 
+
+## Simulated model outcome
+To test the assumptions of the model, I ran a model simulation. 
+```{r}
+# Simulate data for sim model
+
+# Model assumptions
+n <- 500 # Sample size
+beta0  <- 1.0 # Intercept
+beta_mass <- 0.6 # Effect of body mass on response
+beta_temp <- -0.05 # Effect of temperature on response
+phi <- 5 # Gamma shape parameter
+genus_sd <- 0.4 # SD of genus-level random intercepts
+
+# Generate data with genera
+genus <- factor(sample(c("Agapostemon","Apis","Augochorella","Bombus", "Colletes", "Diadasia", "Halictus", "Lasioglossum"), n, replace = TRUE))
+
+# Generate random genus effects on response
+genus_effect <- rnorm(8, 0, genus_sd)
+names(genus_effect) <- levels(genus)
+
+# Generate data for predictors
+body_mass <- rnorm(n, mean = 0.3, sd = 0.03)
+amb_temp <- rnorm(n, mean = 23, sd = 3)
+
+# Linearized model to predict log expected time
+log_mu <- beta0 +
+       beta_mass+
+       beta_temp+
+       genus_effect[genus]
+
+mu <- exp(log_mu) 
+
+# Simulate response variable
+time <- rgamma(n, shape = phi, scale = mu / phi)
+
+# Put predictors into a dataframe
+sim_data <- data.frame(time, body_mass, amb_temp, genus)
+
+sim_fit <- glm(time ~ body_mass * genus + amb_temp,
+  family = Gamma(link = "log"),
+  data = sim_data)
+
+summary(sim_fit) # We expect to see the values we put in
+
+```
+Here, I defined model assumptions and ran the model expecting to get similar beta values. The expected values for multiple betas were not in proximity to my assumption inputs, and the interaction betas were dissimilar from each other, suggesting that there is some interactive effect between genus and mass in the simulated data. However, it is difficult to simulate ecological data and make meaningful conlusions due to the uncertainty and confounders in any system. 
+
+
+## Generating two models
+
+Using the principles demonstrated in the data simulation, I ran two models to observe the effect of including ambient air temperature as a predictor. 
+```{r}
+mod1 <- glm(
+  tbs_mins ~ mass_g + genus,
+  family = Gamma(link = "log"),
+  data = therm_subset
+)
+
+mod1_summary <- summary(mod1)
+```
+
+
+```{r}
+# Generate predicted data grid with predictors
+pred_data1 <- expand_grid(
+  mass_g = seq(
+    min(therm_subset$mass_g, na.rm = TRUE),
+    max(therm_subset$mass_g, na.rm = TRUE),
+    length.out = length(therm_subset$mass_g)
+  ),
+  genus = unique(therm_subset$genus)
+)
+
+pred_ci1 <- predict(mod1,
+                   newdata = pred_data1,
+                   type = "link",
+                   se.fit = TRUE)
+
+pred_results1 <- pred_data1 %>%
+  mutate(
+    # Generate predictions in link space
+    link_vals = pred_ci1$fit,
+    # Generate column of standard errors from link space values
+    se = pred_ci1$se.fit,
+    # Back out of link space, generate response predictions
+    pred_tbs = exp(link_vals),
+    # Generate confidence interval (~2 standard deviations away from predicted values in the response space)
+    lower = exp(link_vals - 1.96 * se),
+    upper = exp(link_vals + 1.96 * se)
+  )
+```
+
+```{r}
+ggplot(pred_results1, aes(mass_g, pred_tbs)) +
+  facet_wrap(~genus, scales = "free_x") +
+  geom_line(size = 0.5) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
+              alpha = 0.5, color = NA) +
+  scale_x_continuous(limits = c(0, 0.1)) +
+  scale_y_continuous(limits = c(0, 900)) +
+  labs(
+    title = "Predicted Time Before Stupor (TBS) with a Gamma GLM",
+    x = "Log Mass (g)",
+    y = "Predicted TBS (minutes)"
+  ) +
+  theme_minimal() +
+  scale_fill_paletteer_d("palettetown::charizard")
+```
+
+
+```{r}
+mod2 <- glm(
+  tbs_mins ~ mass_g * genus + ambient_air_temperature_c,
+  family = Gamma(link = "log"),
+  data = therm_subset
+)
+
+mod2_summary <- summary(mod2)
+```
+
+```{r}
+# Prediction grid holding temperature at constant value
+pred_data2 <- expand_grid(
+  mass_g = seq(
+    min(therm_subset$mass_g, na.rm = TRUE),
+    max(therm_subset$mass_g, na.rm = TRUE),
+    length.out = length(therm_subset$mass_g)
+  ),
+  
+  genus = unique(therm_subset$genus),
+  
+  ambient_air_temperature_c = mean(therm_subset$ambient_air_temperature_c, na.rm = TRUE),
+)
+
+pred_ci2 <- predict(mod2,
+                    newdata = pred_data2,
+                    type = "link",
+                    se.fit = TRUE)
+
+pred_results2 <- pred_data2 %>%
+  mutate(
+    link_vals = pred_ci2$fit,
+    se = pred_ci2$se.fit,
+    pred_tbs = exp(link_vals),
+    lower = exp(link_vals - 1.96 * se),
+    upper = exp(link_vals + 1.96 * se)
+  )
+```
+
+```{r}
+ggplot(pred_results2, aes(mass_g, pred_tbs)) +
+  facet_wrap( ~ genus, scales = "free_x") +
+geom_line(size = 0.5) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = genus),
+              alpha = 0.7,
+              color = NA) +
+  scale_y_continuous(limits = c(0, 1000)) +
+  labs(title = "Predicted Time Before Stupor (TBS) Gamma GLM",
+       x = "Log Mass (g)",
+       y = "Predicted TBS (minutes)",
+       fill = "Genus") +
+  theme_minimal() +
+  scale_fill_paletteer_d("palettetown::charizard")
+```
+
+
+## Comparing models and interpreting outputs
+```{r}
+# Using broom package to clean up summary and return only term, estimate, std.error, statistic, pval, and model which I call
+mod1_sum_tidy <- tidy(mod1) %>% mutate(model = "Model 1")
+mod2_sum_tidy <- tidy(mod2) %>% mutate(model = "Model 2")
+
+# Combine models
+model_comb <- bind_rows(mod1_sum_tidy, mod2_sum_tidy)
+
+# Add back the same significance indicators as the model
+model_comb <- model_comb %>%
+  mutate(sig = case_when(
+    p.value < 0.001 ~ "***",
+    p.value < 0.01  ~ "**",
+    p.value < 0.05  ~ "*",
+    p.value < 0.1   ~ ".",
+    TRUE ~ ""
+  ))
+
+summary_table <- model_comb %>%
+  select(model, term, estimate, std.error, statistic, p.value, sig) %>%
+  arrange(term, model)
+
+summary_table %>%
+  kbl(
+    caption = "Comparison of Gamma GLM Models for TBS",
+    digits = 3,
+    align = "lcccccc"
+  ) %>%
+  kable_classic(full_width = FALSE, html_font = "Arial") %>%
+  add_header_above(c(" " = 1, "Coefficient Details" = 6))
+```
+Estimates for coefficients here represent differences from the reference genus (Agapostemon), and interaction coefficients from model 2 represent how the effect of mass varies by genus.
+
+Based on the model summary, we can see that Halictus are predicted to have a longer TBS than other genera. Augochorella are also seen to have a higher predicted TBS. 
+
+Neither model found mass to be significantly associated with TBS, indicated by the p-values for the interaction terms. This tells us that mass is not a good predictor of TBS on this dataset. However, this does not suggest it should be excluded from the model, as ecologically we know that mass is linked to genus. 
+
+Comparing the two models, the presence of temperature as a covariate increases the predicted thermal tolerance at the reference level (shown by a positive coefficient estimate in model 2). 
+
+Citations:
+Frost, J. Gamma distribution: Uses, parameters & examples - statistics by Jim. https://statisticsbyjim.com/probability/gamma-distribution/ 
+
+Gamma distribution | gamma function | properties | PDF. https://www.probabilitycourse.com/chapter4/4_2_4_Gamma_distribution.php 
+
+The Gamma Distribution. R: The gamma distribution. https://stat.ethz.ch/R-manual/R-devel/library/stats/html/GammaDist.html 
+
+GeeksforGeeks. (2025, July 12). Skewness in R programming. https://www.geeksforgeeks.org/r-language/skewness-and-kurtosis-in-r-programming/ 
+
+Science: Pollinators. California Department of Fish and Wildlife. https://wildlife.ca.gov/Science-Institute/Pollinators 
